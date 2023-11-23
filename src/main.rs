@@ -38,6 +38,7 @@ async fn get_file_or_list_dir(Path(url_path): Path<String>) -> Response {
         };
     }
     if fs_path.is_file() {
+        // TODO: stream the content
         return match tokio::fs::read(&fs_path).await {
             Ok(content) => {
                 let mime_type = mime_guess::from_path(&fs_path)
@@ -107,6 +108,7 @@ where
 
 #[tokio::main]
 async fn main() {
+    // TODO: add logging and tracing
     // build our application with a single route
     let app = Router::new()
         .route("/", get(list_pwd))
