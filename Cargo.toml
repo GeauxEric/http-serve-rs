@@ -1,10 +1,13 @@
 [package]
 name = "http-serve-rs"
+authors = ["yunding.eric@gmail.com"]
 version = "0.1.0"
 edition = "2021"
 description = "Serve static content from files, like Python's http.server"
 license = "MIT"
 keywords = ["http", "server", "static"]
+repository = "https://github.com/GeauxEric/http-serve-rs"
+readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
