@@ -9,5 +9,5 @@ cargo install http-serve-rs
 
 # Usage
 ```shell
-RUST_LOG=tower_http=debug http-serve-rs
+RUST_LOG=tower_http=debug http-serve-rs --port 3000
 ```
