@@ -5,6 +5,7 @@ use axum::extract::Path;
 use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse, Response};
 use axum::{http, routing::get, Router};
+use clap::{arg, command, value_parser, Command};
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 
@@ -108,14 +109,30 @@ where
     }
 }
 
+fn get_commands() -> Command {
+    command!() // requires `cargo` feature
+        .arg(
+            arg!(
+                -p --port <PORT> "Sets network port"
+            )
+            .required(false)
+            .default_value("3000")
+            .value_parser(value_parser!(usize)),
+        )
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
+    let matches = get_commands().get_matches();
+    let port: usize = *matches.get_one("port").expect("`port` is not set");
+    let addr = format!("0.0.0.0:{}", port);
+    println!("Serving HTTP on http://{}/ ...", addr);
     // build our application with a single route
     let app = Router::new()
         .route("/", get(list_pwd))
         .route("/*fs_path", get(get_file_or_list_dir))
         .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
