@@ -5,6 +5,8 @@ use axum::extract::Path;
 use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse, Response};
 use axum::{http, routing::get, Router};
+use tower::ServiceBuilder;
+use tower_http::trace::TraceLayer;
 
 fn fs_path_to_url_path(p: &FsPath) -> String {
     let s = p.to_str().unwrap();
@@ -25,7 +27,7 @@ fn test_path_to_href() {
 }
 
 async fn list_pwd() -> Result<Html<String>, AppErr> {
-    return list_dir(FsPath::new(".")).await;
+    list_dir(FsPath::new(".")).await
 }
 
 async fn get_file_or_list_dir(Path(url_path): Path<String>) -> Response {
@@ -86,7 +88,7 @@ async fn list_dir(p: &FsPath) -> Result<Html<String>, AppErr> {
     }
 
     html_content.push_str("</ul></body></html>");
-    return Ok(Html(html_content));
+    Ok(Html(html_content))
 }
 
 struct AppErr(anyhow::Error);
@@ -108,15 +110,12 @@ where
 
 #[tokio::main]
 async fn main() {
-    // TODO: add logging and tracing
+    tracing_subscriber::fmt::init();
     // build our application with a single route
     let app = Router::new()
         .route("/", get(list_pwd))
-        .route("/*fs_path", get(get_file_or_list_dir));
-
-    // run it with hyper on localhost:3000
-    axum::Server::bind(&"0.0.0.0:3000".parse().unwrap())
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+        .route("/*fs_path", get(get_file_or_list_dir))
+        .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    axum::serve(listener, app).await.unwrap();
 }
