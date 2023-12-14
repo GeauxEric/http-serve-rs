@@ -1,11 +1,16 @@
 use std::path::{Path as FsPath, PathBuf};
 
 use anyhow::anyhow;
+use axum::body::Body;
 use axum::extract::Path;
 use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse, Response};
 use axum::{http, routing::get, Router};
 use clap::{arg, command, value_parser, Command};
+use futures_util::TryFutureExt;
+use futures_util::TryStreamExt;
+use tokio_util::bytes::BytesMut;
+use tokio_util::codec::{BytesCodec, FramedRead};
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 
@@ -41,22 +46,19 @@ async fn get_file_or_list_dir(Path(url_path): Path<String>) -> Response {
         };
     }
     if fs_path.is_file() {
-        // TODO: stream the content
-        return match tokio::fs::read(&fs_path).await {
-            Ok(content) => {
-                let mime_type = mime_guess::from_path(&fs_path)
-                    .first()
-                    .map(|m| m.to_string())
-                    .unwrap_or("application/octet-stream".to_string());
-                (
-                    StatusCode::OK,
-                    [(http::header::CONTENT_TYPE, mime_type)],
-                    content,
-                )
-                    .into_response()
-            }
-            Err(e) => AppErr::from(e).into_response(),
-        };
+        let mime_type = mime_guess::from_path(&fs_path)
+            .first()
+            .map(|m| m.to_string())
+            .unwrap_or("application/octet-stream".to_string());
+        let stream = tokio::fs::File::open(fs_path)
+            .map_ok(|file| FramedRead::new(file, BytesCodec::new()).map_ok(BytesMut::freeze))
+            .try_flatten_stream();
+        let response = Response::builder()
+            .status(StatusCode::OK)
+            .header(http::header::CONTENT_TYPE, mime_type)
+            .body(Body::from_stream(stream))
+            .unwrap();
+        return response;
     }
     AppErr(anyhow!("unhandled type")).into_response()
 }
