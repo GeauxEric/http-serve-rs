@@ -1,6 +1,5 @@
 use std::path::{Path as FsPath, PathBuf};
 
-use anyhow::anyhow;
 use axum::body::Body;
 use axum::extract::Path;
 use axum::http::StatusCode;
@@ -32,18 +31,24 @@ fn test_path_to_href() {
     assert_eq!(fs_path_to_url_path(path), "");
 }
 
-async fn list_pwd() -> Result<Html<String>, AppErr> {
-    list_dir(FsPath::new(".")).await
+async fn list_pwd() -> Response {
+    list_dir(FsPath::new("."))
+        .await
+        .map(|html| html.into_response())
+        .unwrap_or_else(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", e)).into_response())
 }
 
 async fn get_file_or_list_dir(Path(url_path): Path<String>) -> Response {
     let mut fs_path = PathBuf::from(".");
     fs_path.push(url_path);
     if fs_path.is_dir() {
-        return match list_dir(&fs_path).await {
-            Ok(html) => html.into_response(),
-            Err(e) => e.into_response(),
-        };
+        let resp = list_dir(&fs_path)
+            .await
+            .map(|html| html.into_response())
+            .unwrap_or_else(|e| {
+                (StatusCode::INTERNAL_SERVER_ERROR, format!("{}", e)).into_response()
+            });
+        return resp;
     }
     if fs_path.is_file() {
         let mime_type = mime_guess::from_path(&fs_path)
@@ -60,10 +65,14 @@ async fn get_file_or_list_dir(Path(url_path): Path<String>) -> Response {
             .unwrap();
         return response;
     }
-    AppErr(anyhow!("unhandled type")).into_response()
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        format!("unhandled type. path={}", fs_path.display()),
+    )
+        .into_response()
 }
 
-async fn list_dir(p: &FsPath) -> Result<Html<String>, AppErr> {
+async fn list_dir(p: &FsPath) -> anyhow::Result<Html<String>> {
     let mut dir = tokio::fs::read_dir(p).await?;
     let mut html_content =
         String::from("<html><head><title>Directory Listing</title></head><body><ul>");
@@ -92,23 +101,6 @@ async fn list_dir(p: &FsPath) -> Result<Html<String>, AppErr> {
 
     html_content.push_str("</ul></body></html>");
     Ok(Html(html_content))
-}
-
-struct AppErr(anyhow::Error);
-
-impl IntoResponse for AppErr {
-    fn into_response(self) -> Response {
-        (StatusCode::INTERNAL_SERVER_ERROR).into_response()
-    }
-}
-
-impl<E> From<E> for AppErr
-where
-    E: Into<anyhow::Error>,
-{
-    fn from(err: E) -> Self {
-        Self(err.into())
-    }
 }
 
 fn get_commands() -> Command {
